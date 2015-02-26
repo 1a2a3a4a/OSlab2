@@ -22,9 +22,14 @@
 #define PRODUCER_ITERATIONS (ITERATIONS / PRODUCERS)
 #define CONSUMER_ITERATIONS (ITERATIONS / CONSUMERS)
 
+sem_t semconsumer;
+sem_t semproducer;
+sem_t semcrit;
+
 typedef struct {
     int value[BUFFER_SIZE];
-    int next_in, next_out;
+    int next_in;
+    int next_out;
 } buffer_t;
 
 
@@ -43,11 +48,16 @@ insert_item(int item)
     /* TODO: Check and wait if the buffer is full. Ensure exclusive
      * access to the buffer and use the existing code to remove an item.
      */
-
+    /*crit section */
+    sem_wait(&semproducer);
+    sem_wait(&semcrit);
 
     buffer.value[buffer.next_in] = item;
     buffer.next_in = (buffer.next_in + 1) % BUFFER_SIZE;
 
+    sem_post(&semcrit);
+    sem_post(&semconsumer);
+   
 
     return 0;
 }
@@ -64,11 +74,16 @@ remove_item(int *item)
      * access to the buffer and use the existing code to remove an item.
      */
 
+    /* crit section */
+    sem_wait(&semconsumer);
+    sem_wait(&semcrit);
 
     *item = buffer.value[buffer.next_out];
     buffer.value[buffer.next_out] = -1;
     buffer.next_out = (buffer.next_out + 1) % BUFFER_SIZE;
-
+    sem_post(&semcrit);
+    sem_post(&semproducer);
+   
     return 0;
 }
 
@@ -133,7 +148,9 @@ main()
     long int i;
 
     srand(time(NULL));
-
+    sem_init(&semconsumer,0,0);
+    sem_init(&semproducer,0,BUFFER_SIZE);
+    sem_init(&semcrit,0,1);
     /* Create the consumer threads */
     for (i = 0; i < CONSUMERS; i++)
 	if (pthread_create(&consumer_tid[i], NULL, consumer, (void *)i) != 0) {
